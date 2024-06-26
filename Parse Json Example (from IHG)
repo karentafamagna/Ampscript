@@ -1,0 +1,164 @@
+
+%%[/*Data Configuration*/]%%
+<div style='display:none'>
+%%[   
+
+SET @txIdentifier =  'ABANDONEDCART_EMAIL'
+SET @guest__member_id = AttributeValue("memberId")
+SET @email = AttributeValue("EmailAddress")
+
+IF Empty(@guest__member_id) OR @guest__member_id == "514005573" THEN
+RaiseError("Null MemberID value",true)
+ENDIF
+
+
+/*Retrieve Member Details from Customer Data Extension*/
+IF NOT EMPTY(@guest__member_id) THEN
+
+    SET @rows = LookupRows("ENT.Customer", "MemberId", @guest__member_id)
+    
+    IF RowCount(@rows) > 0 THEN
+        SET @row = Row(@rows, 1)
+        SET @localeCode = Field(@row, "Language")
+        SET @regionCode = Field(@row, "SUBREGION")
+        SET @countrycode = Field(@row, "COUNTRYCODE")/*used for unsub link*/
+        SET @email_encrypt = Field(@row, "EMAIL_ENCRYPT")/*used for unsub link*/
+        SET @guest__memlvl = Field(@row, "MEMLVL")
+        SET @guest__pointsBalance = Field(@row, "CURRENT_PTS_BAL")
+    ENDIF
+ENDIF
+SET @locale = AttributeValue("rgn_lang_cd")
+
+ /*update to region language code to get iso code*/
+ SET @iso_code = LOOKUP("ENT.txn_map_locale2RgnLangCd2iso_LIVE","iso_code","rgn_lang_cd_booking",@locale)
+
+  SET @payload = AttributeValue("payload")
+  SET @json = TreatAsContent(@payload)
+
+  SET @firstNameSet = BuildRowsetFromJSON(@json, "$.firstName", 1)
+  SET @lastNameSet = BuildRowsetFromJSON(@json, "$.lastName", 1)
+  SET @emailSet = BuildRowsetFromJSON(@json, "$.emailAddress", 1)
+  SET @nameSet = BuildRowsetFromJSON(@json, "$.name", 1)
+  SET @imageUrlSet = BuildRowsetFromJSON(@json, "$.imageUrl", 1)
+  SET @hotelCitySet = BuildRowsetFromJSON(@json, "$.hotelCity", 1)
+  SET @brandSet = BuildRowsetFromJSON(@json, "$.brand", 1)
+  SET @idSet = BuildRowsetFromJSON(@json, "$.id", 1)
+  SET @checkInSet = BuildRowsetFromJSON(@json, "$.checkIn", 1)
+  SET @checkOutSet = BuildRowsetFromJSON(@json, "$.checkOut", 1)
+  SET @numberOfRooms = AttributeValue('room')
+  IF  EMPTY(@numberOfRooms) THEN
+  SET @numberOfRooms = '1'
+  ENDIF
+  
+ SET @guestsSet = BuildRowsetFromJSON(@json, "$.guests", 1)
+  
+  IF RowCount(@guestsSet) > 0 THEN
+    SET @guestsRow = Row(@guestsSet, 1)
+    SET @guestsJSON = Field(@guestsRow, 1)
+
+   /* Parsing the number of adults and children directly from the 'guests' object */
+SET @numberOfAdultsSET = BuildRowsetFromJSON(@json, "$.guests.Adults", 1)
+
+ IF RowCount(@numberOfAdultsSET) > 0 THEN
+   SET @numberOfAdults = Field(Row(@numberOfAdultsSET, 1), "Value")
+ ENDIF
+ 
+ IF @numberOfAdults == '0' THEN
+ SET @numberOfAdults = '1'
+ ENDIF
+
+SET @numberOfChildren = BuildRowsetFromJSON(@json, "$.guests.Children", 1)
+SET @numberOfChildren = Field(Row(@numberOfChildren, 1), "Value")
+
+/* Parsing child ages as a string, then replacing commas with dots */
+SET @childAges = BuildRowsetFromJSON(@json, "$.guests.childAges", 1)
+IF RowCount(@childAges) > 0 THEN
+    SET @childAges = Field(Row(@childAges, 1), "Value")
+    SET @agesOfChildren = Replace(@childAges, ",", ".")
+ELSE
+    SET @agesOfChildren = ""
+ENDIF
+
+
+    ENDIF
+
+ 
+  
+  IF RowCount(@firstNameSet) > 0 THEN
+    SET @row = Row(@firstNameSet, 1)
+    SET @guest_firstName = Field(@row, "Value")
+  ENDIF
+
+  IF RowCount(@lastNameSet) > 0 THEN
+    SET @row = Row(@lastNameSet, 1)
+    SET @guest_lastName = Field(@row, "Value")
+  ENDIF
+
+  IF RowCount(@emailSet) > 0 THEN
+    SET @row = Row(@emailSet, 1)
+    SET @guest_email = Field(@row, "Value")
+  ENDIF
+
+  IF RowCount(@nameSet) > 0 THEN
+    SET @row = Row(@nameSet, 1)
+    SET @hotel_name = Field(@row, "Value")
+    SET @hotel_location = Field(@row, "Value")
+  ENDIF
+
+ IF RowCount(@imageUrlSet) > 0 THEN
+    SET @row = Row(@imageUrlSet, 1)
+    SET @image_url = Field(@row, "Value")
+  ENDIF
+
+  IF RowCount(@hotelCitySet) > 0 THEN
+    SET @row = Row(@hotelCitySet, 1)
+    SET @hotel_city = Field(@row, "Value")
+  ENDIF
+
+  IF RowCount(@brandSet) > 0 THEN
+    SET @row = Row(@brandSet, 1)
+    SET @brandCode = Field(@row, "Value")
+  ENDIF
+
+  IF RowCount(@idSet) > 0 THEN
+    SET @row = Row(@idSet, 1)
+    SET @hotelCode = Field(@row, "Value")
+  ENDIF
+
+  IF RowCount(@checkInSet) > 0 THEN
+    SET @row = Row(@checkInSet, 1)
+    SET @checkInDate = Field(@row, "Value")
+    IF Empty(@checkInDate)
+    THEN RaiseError("CheckIn Date NULL",true)
+    ENDIF 
+    SET @dateObj_checkInDate = FormatDate(@checkInDate, "M/D/YYYY")
+     IF Empty(@dateObj_checkInDate)
+    THEN RaiseError("dateObj_checkInDate NULL",true)
+    ENDIF 
+    SET @adjustedDateObj_checkInDate = DateAdd(@dateObj_checkInDate, -1, "M")/* Subtract one month */
+  ENDIF
+
+  IF RowCount(@checkOutSet) > 0 THEN
+    SET @row = Row(@checkOutSet, 1)
+    SET @checkOutDate = Field(@row, "Value")
+    IF Empty(@checkOutDate)
+    THEN RaiseError("CheckOut Date NULL",true)
+    ENDIF 
+    SET @dateObj_checkOutDate = FormatDate(@checkOutDate, "M/D/YYYY")
+    IF Empty(@dateObj_checkOutDate)
+    THEN RaiseError("dateObj_checkOutDate NULL",true)
+    ENDIF 
+    SET @adjustedDateObj_checkOutDate = DateAdd(@dateObj_checkOutDate, -1, "M")/* Subtract one month */
+  ENDIF
+
+
+/* Dates formatted for URL and minus one on dates*/
+SET @emailCheckInDate = formatDate(@checkInDate,"l","", @iso_code)
+SET @checkInMMYY = Concat(FormatDate(@adjustedDateObj_checkInDate, "MM"), FormatDate(@adjustedDateObj_checkInDate, "YYYY"))
+SET @checkInDay = Substring(@checkInDate, 4, 2)
+SET @checkOutMMYY = Concat(FormatDate(@adjustedDateObj_checkOutDate, "MM"), FormatDate(@adjustedDateObj_checkOutDate, "YYYY"))
+SET @checkOutDay = Substring(@checkOutDate, 4, 2)
+
+]%% 
+ 
+</div>
